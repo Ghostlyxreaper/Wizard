@@ -1,0 +1,46 @@
+name: Secure Linux Remote Access (Tailscale SSH)
+on:
+  workflow_dispatch:
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      - name: Install and start Tailscale
+        id: tailscale
+        env:
+          TAILSCALE_AUTH_KEY: ${{ secrets.TAILSCALE_AUTH_KEY }}
+        run: |
+          echo "🔧 Installing Tailscale..."
+          curl -fsSL https://tailscale.com/install.sh | sh
+          echo "🔐 Bringing up Tailscale with SSH enabled..."
+          sudo tailscale up --ssh --authkey $TAILSCALE_AUTH_KEY --hostname "linux-gh-runner"
+          IP=$(tailscale ip -4 | head -n 1)
+          echo "TAILSCALE_IP=$IP" >> $GITHUB_OUTPUT
+      - name: Show connection details
+        run: |
+          IP=${{ steps.tailscale.outputs.TAILSCALE_IP }}
+          echo ""
+          echo "=== Tailscale SSH Access ==="
+          echo "Address: $IP"
+          echo "Username: $(whoami)"
+          echo "Connect using:"
+          echo "  ssh $USER@$IP"
+          echo ""
+          echo "✅ Tailscale SSH is active — no password needed if your node is authorized in the same tailnet."
+          echo "=============================="
+      - name: Keep alive (optional)
+        run: |
+          for i in {1..6}; do
+            echo "[$(date)] Runner active — connect if needed."
+            sleep 300
+          done
+      - name: Cleanup and disconnect
+        if: always()
+        run: |
+          echo "🧹 Cleaning up Tailscale session..."
+          sudo tailscale down || true
+          sudo tailscale logout || true
+          echo "✅ Cleanup complete. Session closed."
